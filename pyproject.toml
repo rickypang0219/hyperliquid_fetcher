@@ -1,0 +1,22 @@
+[project]
+name = "hyperliquid-fetcher"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "boto3>=1.40.1",
+]
+
+
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.400",
+    "ruff>=0.11.4",
+    "boto3-stubs[apigatewaymanagementapi,ec2,ecs,essential,logs,ses,ssm,stepfunctions,translate]>=1.18,<2.0"
+]
+
+
+[tool.ruff]
+target-version = "py312"
