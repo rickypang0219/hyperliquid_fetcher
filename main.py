@@ -1,4 +1,5 @@
 import os
+import lz4.frame
 from typing import TYPE_CHECKING
 from botocore.exceptions import ClientError
 from boto3.session import Session
@@ -43,6 +44,8 @@ def backward_fetching(
     max_daily_retries = 3
     daily_retry_count = 0
 
+    os.makedirs(output_path, exist_ok=True)
+
     while current_date >= start_date_dt and daily_retry_count < max_daily_retries:
         hourly_retry_count = 0
         current_hour = 23  # Start from the last hour of the day
@@ -51,22 +54,32 @@ def backward_fetching(
             date_str = current_date.strftime("%Y%m%d")
             hour_str = f"{current_hour}"
             s3_key = f"market_data/{date_str}/{hour_str}/l2Book/{coin}.lz4"
-            local_file = os.path.join(output_path, f"{date_str}_{hour_str}_{coin}.lz4")
+            local_file = os.path.join(output_path, f"{date_str}_{hour_str}_{coin}.txt")
 
             try:
-                s3_client.download_file(
-                    bucket_name,
-                    s3_key,
-                    local_file,
-                    ExtraArgs={"RequestPayer": "requester"},
+                response = s3_client.get_object(
+                    Bucket=bucket_name,
+                    Key=s3_key,
+                    RequestPayer="requester",
                 )
+                streaming_body = response["Body"]
+                with open(local_file, "wb") as local_f:
+                    decompressor = lz4.frame.LZ4FrameDecompressor()
+                    for chunk in streaming_body.iter_chunks(chunk_size=4096):
+                        local_f.write(decompressor.decompress(chunk))
+
+                    local_f.write(decompressor.decompress(b""))
+                    local_f.flush()
+                    os.fsync(local_f.fileno())
+
                 print(f"Successfully downloaded: {s3_key}")
+
                 hourly_retry_count = 0  # Reset hourly retry count on success
                 current_hour -= 1  # Move to previous hour
 
             except ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code")
-                if error_code == "404":
+                if error_code == "NoSuchKey":
                     print(f"File not found: {s3_key}")
                     hourly_retry_count += 1
 
@@ -116,7 +129,7 @@ def backward_fetching(
 if __name__ == "__main__":
     backward_fetching(
         "BTC",
-        "20230410",
-        "20230415",
+        "20250601",
+        "20250630",
         "/Volumes/Samsung_T7/Hyperliquid/BTCUSDT",
     )
